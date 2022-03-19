@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/Nishith-Savla/wakacli/common"
 	"github.com/Nishith-Savla/wakacli/dto"
@@ -29,6 +30,10 @@ func buildURL(apiKey string, predicate string, queryParams map[string]string) (*
 	return durationsUrl, nil
 }
 
+func secToHrMinSec(seconds int) (int, int, int) {
+	return seconds / 3600, seconds % 3600 / 60, seconds % 60
+}
+
 func getDuration(date string, includeSeconds bool) (string, error) {
 	durationsUrl, err := buildURL(
 		os.Getenv("API_KEY"),
@@ -45,7 +50,6 @@ func getDuration(date string, includeSeconds bool) (string, error) {
 	}(response.Body)
 
 	var decodedResponse map[string]interface{}
-
 	if err = json.NewDecoder(response.Body).Decode(&decodedResponse); err != nil {
 		return "", err
 	}
@@ -62,10 +66,32 @@ func getDuration(date string, includeSeconds bool) (string, error) {
 		return "", err
 	}
 
-	totalDuration := dto.SumDuration(durationEntries...)
-	readableDuration := fmt.Sprintf("%d hr %d min", totalDuration/3600, totalDuration%3600/60)
-	if includeSeconds {
-		readableDuration += fmt.Sprintf(" %d sec", totalDuration%60)
+	var output strings.Builder
+	durationPerProject := dto.GetDurationPerProject(durationEntries...)
+
+	var maxLength int
+	for project, _ := range durationPerProject {
+		length := len(project)
+		if length > maxLength {
+			maxLength = length
+		}
 	}
-	return readableDuration, nil
+
+	for project, duration := range durationPerProject {
+		hr, min, _ := secToHrMinSec(int(duration))
+		output.WriteString(fmt.Sprintf("%-*s | %02d hr %02d min\n", maxLength, project, hr, min))
+	}
+	output.WriteString("\n")
+
+	totalDuration := dto.GetTotalDuration(durationPerProject)
+
+	hr, min, sec := secToHrMinSec(totalDuration)
+	readableDuration := fmt.Sprintf("%d hr %d min", hr, min)
+	if includeSeconds {
+		readableDuration += fmt.Sprintf(" %d sec", sec)
+	}
+
+	output.WriteString(readableDuration)
+
+	return output.String(), nil
 }
