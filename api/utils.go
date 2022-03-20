@@ -2,16 +2,69 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/Nishith-Savla/wakacli/common"
 	"github.com/Nishith-Savla/wakacli/dto"
 )
+
+func SetAPIKey(apiKey string) error {
+	dirname, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
+
+	data, err := json.MarshalIndent(map[string]string{"apikey": apiKey}, "", "  ")
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
+
+	err = os.WriteFile(filepath.Join(dirname, ".wakacli.json"), data, 0600)
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
+	}
+
+	return nil
+}
+
+func GetAPIKey() (string, error) {
+	var err error
+	var dirname string
+
+	if dirname, err = os.UserHomeDir(); err != nil {
+		return "", err
+	}
+
+	var data []byte
+	if data, err = os.ReadFile(filepath.Join(dirname, ".wakacli.json")); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			fmt.Println("File not found")
+			return "", errors.New("please first set the API Key using `wakacli apikey <your-wakatime-api-key>")
+		}
+		fmt.Println(err)
+		return "", err
+	}
+
+	var unmarshalledData struct {
+		ApiKey string `json:"apikey"`
+	}
+	if err = json.Unmarshal(data, &unmarshalledData); err != nil {
+		fmt.Println(err.Error())
+		return "", err
+	}
+
+	return unmarshalledData.ApiKey, nil
+}
 
 func buildURL(apiKey string, predicate string, queryParams map[string]string) (*url.URL, error) {
 	durationsUrl, err := url.Parse(fmt.Sprintf("%s/users/current/%s", common.WakaTimeAPIUrl, predicate))
@@ -35,8 +88,13 @@ func secToHrMinSec(seconds int) (int, int, int) {
 }
 
 func getDuration(date string, includeSeconds bool) (string, error) {
+	apiKey, err := GetAPIKey()
+	if err != nil {
+		return "", err
+	}
+
 	durationsUrl, err := buildURL(
-		os.Getenv("API_KEY"),
+		apiKey,
 		"durations",
 		map[string]string{"date": date},
 	)
@@ -70,7 +128,7 @@ func getDuration(date string, includeSeconds bool) (string, error) {
 	durationPerProject := dto.GetDurationPerProject(durationEntries...)
 
 	var maxLength int
-	for project, _ := range durationPerProject {
+	for project := range durationPerProject {
 		length := len(project)
 		if length > maxLength {
 			maxLength = length

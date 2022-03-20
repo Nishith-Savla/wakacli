@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -17,7 +18,7 @@ func PrintDuration(durationCalculator func(bool) (string, error)) func(cmd *cobr
 
 		var durationOutput string
 		if durationOutput, err = durationCalculator(includeSeconds); err != nil {
-			panic(err)
+			fmt.Fprintln(os.Stderr, err)
 		}
 
 		fmt.Println(durationOutput)
